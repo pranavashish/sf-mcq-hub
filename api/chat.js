@@ -1,30 +1,45 @@
-// Vercel serverless function — runs on the server, so ANTHROPIC_API_KEY stays secret
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) {
-    res.status(500).json({ error: 'ANTHROPIC_API_KEY is not configured in Vercel environment variables' })
+    res.status(500).json({ error: 'GROQ_API_KEY not set in Vercel env vars' })
     return
   }
 
   try {
-    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+    const upstream = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify({
+        model: 'openai/gpt-oss-120b',       
+        max_tokens: 8000,                     
+        temperature: 0.8,
+        response_format: { type: 'json_object' }, 
+        messages: req.body.messages,
+      }),
     })
 
     const data = await upstream.json()
-    res.status(upstream.status).json(data)
+
+
+    if (!upstream.ok || data.error) {
+      res.status(upstream.status || 500).json({
+        error: data.error?.message || 'Groq API error',
+        code: data.error?.code || null,
+      })
+      return
+    }
+
+    const text = data.choices?.[0]?.message?.content || ''
+    res.status(200).json({ content: [{ type: 'text', text }] })
   } catch (err) {
-    res.status(500).json({ error: 'Failed to reach Anthropic API', details: err.message })
+    res.status(500).json({ error: 'Groq API call failed', details: err.message })
   }
 }
