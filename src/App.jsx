@@ -1,5 +1,11 @@
 import { useState, useCallback, useEffect } from 'react'
+import { CloudLogo, CloudMarkMini } from './SalesforceLogo'
+import {
+  AuroraBackground, TiltCard, RippleButton, Confetti,
+  useCountUp, usePrefersReducedMotion,
+} from './ui'
 
+/* ───────────── DATA ───────────── */
 const LEVELS = [
   {
     id: '1yr', label: '1 Year', title: 'Junior Developer',
@@ -28,7 +34,7 @@ const LEVELS = [
   {
     id: '10yr', label: '10 Years', title: 'Principal Engineer',
     icon: 'ti-diamond', cv: 'lv5',
-    topics: 'Data Architecture · Platform Limits at Scale · Strategy',
+    topics: 'Data Architecture · Limits at Scale · Strategy',
     prompt: `10 years Salesforce principal engineer experience. Core areas: big objects and data archiving strategies (when to archive vs external storage, indexing fields, async SOQL), async processing at enterprise scale (platform event order guarantees or lack thereof, concurrent batch limit of 5, Queueable depth limit of 50, how to build reliable pipelines despite these limits), org consolidation and migration patterns (what breaks in org merges, field API name conflicts, community user migration), CRM Analytics (formerly Einstein Analytics) data flow and recipe design principles, MuleSoft API-led connectivity decision framework (when it solves vs when it over-engineers), GDPR right-to-erasure implementation patterns in Salesforce (what can and cannot be auto-deleted), data migration at scale (Bulk API 2.0 vs REST vs ETL tool trade-offs at 50M+ records), license cost optimization at enterprise scale, platform event bulkhead patterns for large integration volumes.`,
   },
   {
@@ -65,12 +71,19 @@ Rules for "type" field — must be exactly one of:
 "correct" is 0-indexed: 0=A, 1=B, 2=C, 3=D`
 
 const TYPE_CFG = {
-  rare:         { label: 'Rare',          icon: 'ti-alert-triangle', txtvar: 'warning' },
-  gotcha:       { label: 'Gotcha',        icon: 'ti-bug',            txtvar: 'danger'  },
-  scenario:     { label: 'Scenario',      icon: 'ti-briefcase',      txtvar: 'info'    },
-  bestpractice: { label: 'Best Practice', icon: 'ti-shield-check',   txtvar: 'success' },
+  rare:         { label: 'Rare',          icon: 'ti-alert-triangle' },
+  gotcha:       { label: 'Gotcha',        icon: 'ti-bug' },
+  scenario:     { label: 'Scenario',      icon: 'ti-briefcase' },
+  bestpractice: { label: 'Best Practice', icon: 'ti-shield-check' },
 }
 
+const lvVars = (lv) => ({
+  '--lvc': `var(--${lv.cv}-c)`,
+  '--lvg': `var(--${lv.cv}-g)`,
+  '--lvb': `var(--${lv.cv}-b)`,
+})
+
+/* ───────────── COMPONENT ───────────── */
 export default function App() {
   const [phase,    setPhase]    = useState('home')
   const [level,    setLevel]    = useState(null)
@@ -85,34 +98,22 @@ export default function App() {
   const [showExp,  setShowExp]  = useState(false)
   const [dots,     setDots]     = useState(1)
 
-  // Load best scores from localStorage
+  const year = new Date().getFullYear()
+
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('sfq_best_v3')
-      if (saved) setBest(JSON.parse(saved))
-    } catch {}
+    try { const s = localStorage.getItem('sfq_best_v3'); if (s) setBest(JSON.parse(s)) } catch {}
   }, [])
 
-  // Animate loading dots
   useEffect(() => {
     if (phase !== 'loading') return
-    const t = setInterval(() => setDots(d => d >= 3 ? 1 : d + 1), 480)
+    const t = setInterval(() => setDots(d => d >= 3 ? 1 : d + 1), 460)
     return () => clearInterval(t)
   }, [phase])
 
   const launch = useCallback(async (lv) => {
-    setLevel(lv)
-    setPhase('loading')
-    setError(null)
-    setAnswers([])
-    setQs([])
-    setIdx(0)
-    setSel(null)
-    setRevealed(false)
-    setShowExp(false)
-
+    setLevel(lv); setPhase('loading'); setError(null)
+    setAnswers([]); setQs([]); setIdx(0); setSel(null); setRevealed(false); setShowExp(false)
     try {
-      // Calls /api/chat (Vercel serverless function) which holds the API key securely
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -122,415 +123,326 @@ export default function App() {
           messages: [{ role: 'user', content: buildPrompt(lv) }],
         }),
       })
-
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       const raw  = data.content?.find(b => b.type === 'text')?.text || ''
       const s = raw.indexOf('{'), e = raw.lastIndexOf('}')
-      if (s < 0) throw new Error('No JSON in response')
+      if (s < 0) throw new Error('No JSON')
       const parsed = JSON.parse(raw.slice(s, e + 1))
-      if (!Array.isArray(parsed.questions) || parsed.questions.length < 5)
-        throw new Error('Too few questions')
-
-      const normalized = parsed.questions.slice(0, 10).map((q, i) => ({
+      if (!Array.isArray(parsed.questions) || parsed.questions.length < 5) throw new Error('Too few')
+      const norm = parsed.questions.slice(0, 10).map((q, i) => ({
         id: i + 1,
-        question:    q.question    || 'Question unavailable',
-        options:     Array.isArray(q.options) && q.options.length === 4
-                       ? q.options
+        question:    q.question || 'Question unavailable',
+        options:     Array.isArray(q.options) && q.options.length === 4 ? q.options
                        : ['A. Option A', 'B. Option B', 'C. Option C', 'D. Option D'],
-        correct:     typeof q.correct === 'number' && q.correct >= 0 && q.correct <= 3
-                       ? q.correct : 0,
+        correct:     typeof q.correct === 'number' && q.correct >= 0 && q.correct <= 3 ? q.correct : 0,
         explanation: q.explanation || 'No explanation provided.',
         topic:       q.topic || 'General',
         type:        Object.keys(TYPE_CFG).includes(q.type) ? q.type : 'scenario',
       }))
-
-      setQs(normalized)
-      setPhase('quiz')
-    } catch (err) {
-      setError('Could not generate questions. Check your API key is set in Vercel and try again.')
+      setQs(norm); setPhase('quiz')
+    } catch {
+      setError('Could not generate questions. Check your API key in Vercel and try again.')
       setPhase('home')
     }
   }, [])
 
-  const pick = (i) => {
-    if (revealed) return
-    setSel(i)
-    setRevealed(true)
-    setShowExp(false)
-  }
+  const pick = (i) => { if (revealed) return; setSel(i); setRevealed(true); setShowExp(false) }
 
   const advance = () => {
     const q = qs[idx]
-    const newAnswers = [...answers, { sel, correct: q.correct, q }]
-    setAnswers(newAnswers)
-
+    const na = [...answers, { sel, correct: q.correct, q }]
+    setAnswers(na)
     if (idx + 1 >= qs.length) {
-      const score = newAnswers.filter(a => a.sel === a.correct).length
-      const upd   = { ...best }
-      if (upd[level.id] === undefined || score > upd[level.id]) {
-        upd[level.id] = score
-        setBest(upd)
+      const sc = na.filter(a => a.sel === a.correct).length
+      const upd = { ...best }
+      if (upd[level.id] === undefined || sc > upd[level.id]) {
+        upd[level.id] = sc; setBest(upd)
         try { localStorage.setItem('sfq_best_v3', JSON.stringify(upd)) } catch {}
       }
       setPhase('results')
     } else {
-      setIdx(p => p + 1)
-      setSel(null)
-      setRevealed(false)
-      setShowExp(false)
+      setIdx(p => p + 1); setSel(null); setRevealed(false); setShowExp(false)
     }
   }
 
   const score = answers.filter(a => a.sel === a.correct).length
 
   return (
-    <div className="app-shell">
-      <h2 className="sr-only">Salesforce MCQ Practice Hub — scenario-based questions across 6 career levels</h2>
+    <>
+      <AuroraBackground />
+      <div className="app-shell">
+        <h2 className="sr-only">Salesforce MCQ Practice Hub — scenario-based questions across six career levels</h2>
 
-      {/* ───── HOME ───── */}
-      {phase === 'home' && (
-        <div style={{ padding: '28px 0 20px' }}>
-          <div style={{ marginBottom: 28, textAlign: 'center' }}>
-            <p style={{ margin: '0 0 6px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-tertiary)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-              Salesforce Career Ladder
-            </p>
-            <h1 style={{ margin: '0 0 8px', fontSize: 26, fontWeight: 500, color: 'var(--color-text-primary)' }}>
-              MCQ Practice Hub
-            </h1>
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-secondary)' }}>
-              10 AI-generated scenario questions per session &middot; Rare gotchas &middot; Detailed explanations
-            </p>
+        {/* NAV */}
+        <nav className="nav">
+          <div className="nav__brand">
+            <CloudMarkMini size={26} />
+            <span className="nav__name">SF MCQ Hub</span>
           </div>
+          <span className="nav__pill"><i className="ti ti-sparkles" /><span>Free · AI-powered</span></span>
+        </nav>
 
-          {error && (
-            <div style={{
-              background: 'var(--color-background-danger)', border: '0.5px solid var(--color-border-danger)',
-              borderRadius: 'var(--border-radius-md)', padding: '10px 14px', marginBottom: 18,
-              fontSize: 13, color: 'var(--color-text-danger)', display: 'flex', alignItems: 'center', gap: 8,
-            }}>
-              <i className="ti ti-alert-circle" aria-hidden="true" />{error}
-            </div>
-          )}
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10 }}>
-            {LEVELS.map(lv => (
-              <button key={lv.id} className="lvcard" onClick={() => launch(lv)}
-                style={{ borderLeft: `3px solid var(--${lv.cv}-c)` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <i className={`ti ${lv.icon}`} aria-hidden="true" style={{ fontSize: 22, color: `var(--${lv.cv}-c)` }} />
-                  {best[lv.id] !== undefined && (
-                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', background: `var(--${lv.cv}-b)`, color: `var(--${lv.cv}-c)`, padding: '2px 7px', borderRadius: 4 }}>
-                      best {best[lv.id]}/10
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontWeight: 500, fontSize: 15, color: 'var(--color-text-primary)', marginBottom: 2 }}>{lv.label}</div>
-                <div style={{ fontSize: 11, color: `var(--${lv.cv}-c)`, marginBottom: 10 }}>{lv.title}</div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>{lv.topics}</div>
-              </button>
-            ))}
-          </div>
-
-          <p style={{ textAlign: 'center', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-tertiary)', marginTop: 20 }}>
-            Questions regenerate every session &middot; Never the same twice
-          </p>
-        </div>
-      )}
-
-      {/* ───── LOADING ───── */}
-      {phase === 'loading' && level && (
-        <div style={{ padding: '80px 24px', textAlign: 'center' }}>
-          <i className={`ti ${level.icon}`} aria-hidden="true"
-            style={{ fontSize: 40, color: `var(--${level.cv}-c)`, display: 'block', marginBottom: 20 }} />
-          <p style={{ margin: '0 0 8px', fontWeight: 500, fontSize: 16, color: 'var(--color-text-primary)' }}>
-            Generating questions{'·'.repeat(dots)}
-          </p>
-          <p style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--color-text-secondary)' }}>
-            {level.label} &middot; {level.title}
-          </p>
-          <p style={{ margin: 0, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-tertiary)' }}>
-            scenario-based &middot; rare gotchas &middot; production edge cases
-          </p>
-        </div>
-      )}
-
-      {/* ───── QUIZ ───── */}
-      {phase === 'quiz' && qs[idx] && (() => {
-        const q  = qs[idx]
-        const tm = TYPE_CFG[q.type] || TYPE_CFG.scenario
-        return (
-          <div style={{ padding: '20px 0' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <i className={`ti ${level.icon}`} aria-hidden="true" style={{ fontSize: 15, color: `var(--${level.cv}-c)` }} />
-                <span style={{ fontSize: 13, fontWeight: 500, color: `var(--${level.cv}-c)` }}>{level.label}</span>
-              </div>
-              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)' }}>
-                {score}/{answers.length} correct
-              </span>
-            </div>
-
-            {/* Progress dots */}
-            <div style={{ display: 'flex', gap: 5, marginBottom: 18, alignItems: 'center' }}>
-              {qs.map((_, i) => {
-                let cls = 'pdot'
-                if (i < answers.length) cls += answers[i].sel === answers[i].correct ? ' yes' : ' no'
-                else if (i === idx)     cls += ' cur'
-                return <div key={i} className={cls} />
-              })}
-              <span style={{ marginLeft: 'auto', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-tertiary)' }}>
-                Q{idx + 1}/{qs.length}
-              </span>
-            </div>
-
-            {/* Question card */}
-            <div style={{
-              background: 'var(--color-background-primary)', border: '0.5px solid var(--color-border-tertiary)',
-              borderLeft: `3px solid var(--${level.cv}-c)`, borderRadius: 'var(--border-radius-lg)',
-              padding: '18px 18px 18px 16px', marginBottom: 12,
-            }}>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', background: `var(--${level.cv}-b)`, color: `var(--${level.cv}-c)`, padding: '2px 8px', borderRadius: 4 }}>
-                  {q.topic}
-                </span>
-                <span style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, color: `var(--color-text-${tm.txtvar})` }}>
-                  <i className={`ti ${tm.icon}`} aria-hidden="true" style={{ fontSize: 12 }} />
-                  {tm.label}
-                </span>
-              </div>
-              <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, color: 'var(--color-text-primary)' }}>
-                {q.question}
+        {/* ───── HOME ───── */}
+        {phase === 'home' && (
+          <div className="screen">
+            <header className="hero">
+              <div className="hero__logo"><CloudLogo size={104} /></div>
+              <p className="hero__eyebrow">Salesforce Career Ladder</p>
+              <h1 className="hero__title">Master the Cloud</h1>
+              <p className="hero__sub">
+                Ten AI-generated, scenario-based MCQs every session. Rare gotchas, production edge cases,
+                and detailed explanations — tuned to your experience level.
               </p>
-            </div>
-
-            {/* Options */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 14 }}>
-              {q.options.map((opt, i) => {
-                let cls = 'opt'
-                const isOk = revealed && i === q.correct
-                const isNg = revealed && i === sel && i !== q.correct
-                if (revealed) {
-                  if (isOk)      cls += ' ok'
-                  else if (isNg) cls += ' ng'
-                  else           cls += ' dim'
-                }
-                return (
-                  <button key={i} className={cls} onClick={() => pick(i)} disabled={revealed}>
-                    <span style={{
-                      width: 22, height: 22, borderRadius: 4, flexShrink: 0,
-                      fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: isOk ? 'var(--color-background-success)' : isNg ? 'var(--color-background-danger)' : 'var(--color-background-secondary)',
-                      color: isOk ? 'var(--color-text-success)' : isNg ? 'var(--color-text-danger)' : 'var(--color-text-tertiary)',
-                    }}>
-                      {isOk ? <i className="ti ti-check" aria-hidden="true" style={{ fontSize: 13 }} />
-                             : isNg ? <i className="ti ti-x" aria-hidden="true" style={{ fontSize: 13 }} />
-                             : String.fromCharCode(65 + i)}
-                    </span>
-                    <span>{opt.replace(/^[A-D]\.\s*/i, '')}</span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Explanation + Next */}
-            {revealed && (
-              <>
-                <button onClick={() => setShowExp(e => !e)} style={{
-                  display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
-                  cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: 12,
-                  color: 'var(--color-text-secondary)', padding: '2px 0', marginBottom: 8,
-                }}>
-                  <i className={`ti ${showExp ? 'ti-chevron-down' : 'ti-chevron-right'}`} aria-hidden="true" style={{ fontSize: 13 }} />
-                  {showExp ? 'Hide explanation' : 'Show explanation'}
-                </button>
-
-                {showExp && (
-                  <div style={{
-                    background: 'var(--color-background-info)', border: '0.5px solid var(--color-border-info)',
-                    borderRadius: 'var(--border-radius-md)', padding: '14px 16px', marginBottom: 12,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                      <i className="ti ti-bulb" aria-hidden="true" style={{ fontSize: 14, color: 'var(--color-text-info)' }} />
-                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-info)' }}>Explanation</span>
-                    </div>
-                    <p style={{ margin: 0, fontSize: 13, lineHeight: 1.75, color: 'var(--color-text-primary)' }}>
-                      {q.explanation}
-                    </p>
-                  </div>
-                )}
-
-                <button onClick={advance} style={{
-                  width: '100%', padding: '12px 0', background: `var(--${level.cv}-b)`,
-                  border: `0.5px solid var(--${level.cv}-c)`, borderRadius: 'var(--border-radius-md)',
-                  fontSize: 14, fontWeight: 500, color: `var(--${level.cv}-c)`,
-                  cursor: 'pointer', fontFamily: 'var(--font-sans)',
-                }}>
-                  {idx + 1 >= qs.length ? 'See results' : 'Next question'}
-                  <i className="ti ti-arrow-right" aria-hidden="true" style={{ marginLeft: 8, fontSize: 14 }} />
-                </button>
-              </>
-            )}
-          </div>
-        )
-      })()}
-
-      {/* ───── RESULTS ───── */}
-      {phase === 'results' && level && (() => {
-        const total = answers.length
-        const pct   = total > 0 ? Math.round((score / total) * 100) : 0
-        const msg   = pct >= 90 ? 'Outstanding!' : pct >= 70 ? 'Solid work' : pct >= 50 ? 'Keep going' : 'More practice needed'
-        const sub   = pct >= 90 ? 'You nailed it. Ready to try a harder level?'
-                    : pct >= 70 ? 'Good foundation. Review the ones you missed.'
-                    : pct >= 50 ? "You're getting there. Study the explanations."
-                    : 'Review all explanations and try again.'
-        return (
-          <div style={{ padding: '28px 0 20px' }}>
-            <div style={{ textAlign: 'center', marginBottom: 28 }}>
-              <div style={{ fontSize: 56, fontWeight: 500, color: 'var(--color-text-primary)', lineHeight: 1, marginBottom: 6 }}>
-                {score}<span style={{ fontSize: 26, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>/{total}</span>
+              <div className="hero__stats">
+                <span className="hero__chip"><i className="ti ti-stack-2" />6 levels</span>
+                <span className="hero__chip"><i className="ti ti-refresh" />Fresh every run</span>
+                <span className="hero__chip"><i className="ti ti-bulb" />Explained answers</span>
               </div>
-              <div style={{ fontSize: 18, fontWeight: 500, color: 'var(--color-text-primary)', marginBottom: 4 }}>{msg}</div>
-              <p style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{sub}</p>
-              {best[level.id] !== undefined && (
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: `var(--${level.cv}-c)` }}>
-                  best: {best[level.id]}/10 &middot; {level.label}
-                </span>
-              )}
-            </div>
+            </header>
 
-            <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-lg)', padding: '16px', marginBottom: 18 }}>
-              <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--color-text-secondary)' }}>Click a question to review it</p>
-              <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-                {answers.map((a, i) => {
-                  const ok = a.sel === a.correct
+            {error && (
+              <div className="alert"><i className="ti ti-alert-circle" />{error}</div>
+            )}
+
+            <div className="grid">
+              {LEVELS.map((lv, i) => (
+                <TiltCard key={lv.id} style={{ animationDelay: `${i * 70}ms`, ...lvVars(lv) }} onClick={() => launch(lv)}>
+                  <div className="lvcard" style={lvVars(lv)}>
+                    <div className="lvcard__top">
+                      <span className="lvcard__icon"><i className={`ti ${lv.icon}`} /></span>
+                      {best[lv.id] !== undefined && (
+                        <span className="lvcard__best">best {best[lv.id]}/10</span>
+                      )}
+                    </div>
+                    <div className="lvcard__label">{lv.label}</div>
+                    <div className="lvcard__title">{lv.title}</div>
+                    <div className="lvcard__topics">{lv.topics}</div>
+                    <div className="lvcard__go">Start quiz <i className="ti ti-arrow-right" /></div>
+                  </div>
+                </TiltCard>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ───── LOADING ───── */}
+        {phase === 'loading' && level && (
+          <div className="screen load">
+            <div className="load__orbit"><i className={`ti ${level.icon}`} /></div>
+            <p className="load__title">Generating questions{'·'.repeat(dots)}</p>
+            <p className="load__lv">{level.label} · {level.title}</p>
+            <p className="load__meta">scenario-based · rare gotchas · production edge cases</p>
+          </div>
+        )}
+
+        {/* ───── QUIZ ───── */}
+        {phase === 'quiz' && qs[idx] && (() => {
+          const q = qs[idx]
+          const tm = TYPE_CFG[q.type] || TYPE_CFG.scenario
+          const pct = (idx / qs.length) * 100
+          return (
+            <div className="screen" style={lvVars(level)}>
+              <div className="qhead">
+                <div className="qhead__lv"><i className={`ti ${level.icon}`} />{level.label}</div>
+                <span className="qhead__score">{score}/{answers.length} correct</span>
+              </div>
+
+              <div className="pbar"><div className="pbar__fill" style={{ width: `${pct}%` }} /></div>
+
+              <div className="dots">
+                {qs.map((_, i) => {
+                  let c = 'dot'
+                  if (i < answers.length) c += answers[i].sel === answers[i].correct ? ' yes' : ' no'
+                  else if (i === idx) c += ' cur'
+                  return <span key={i} className={c} />
+                })}
+                <span className="dots__count">Q{idx + 1}/{qs.length}</span>
+              </div>
+
+              <div className="qcard" key={idx}>
+                <div className="qcard__tags">
+                  <span className="tag">{q.topic}</span>
+                  <span className="tag tag--type"><i className={`ti ${tm.icon}`} />{tm.label}</span>
+                </div>
+                <p className="qcard__text">{q.question}</p>
+              </div>
+
+              <div className="opts">
+                {q.options.map((opt, i) => {
+                  let c = 'opt'
+                  const ok = revealed && i === q.correct
+                  const ng = revealed && i === sel && i !== q.correct
+                  if (revealed) c += ok ? ' ok' : ng ? ' ng' : ' dim'
                   return (
-                    <button key={i} onClick={() => { setRevIdx(i); setPhase('review') }} style={{
-                      width: 34, height: 34, borderRadius: 'var(--border-radius-md)',
-                      background: ok ? 'var(--color-background-success)' : 'var(--color-background-danger)',
-                      border: `0.5px solid ${ok ? 'var(--color-border-success)' : 'var(--color-border-danger)'}`,
-                      color: ok ? 'var(--color-text-success)' : 'var(--color-text-danger)',
-                      fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                    }}>
-                      {i + 1}
+                    <button key={i} className={c} style={{ animationDelay: `${i * 60}ms` }} onClick={() => pick(i)} disabled={revealed}>
+                      <span className="opt__key">
+                        {ok ? <i className="ti ti-check" /> : ng ? <i className="ti ti-x" /> : String.fromCharCode(65 + i)}
+                      </span>
+                      <span>{opt.replace(/^[A-D]\.\s*/i, '')}</span>
                     </button>
                   )
                 })}
               </div>
-            </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <button className="ghost" onClick={() => { setRevIdx(0); setPhase('review') }}>
-                <i className="ti ti-eye" aria-hidden="true" style={{ marginRight: 8 }} />
-                Review all questions &amp; explanations
-              </button>
-              <button onClick={() => launch(level)} style={{
-                padding: '12px 0', cursor: 'pointer', background: `var(--${level.cv}-b)`,
-                border: `0.5px solid var(--${level.cv}-c)`, borderRadius: 'var(--border-radius-md)',
-                fontSize: 14, fontWeight: 500, color: `var(--${level.cv}-c)`, fontFamily: 'var(--font-sans)',
-              }}>
-                <i className="ti ti-refresh" aria-hidden="true" style={{ marginRight: 8 }} />
-                New set of questions — {level.label}
-              </button>
-              <button className="ghost" onClick={() => setPhase('home')}>
-                <i className="ti ti-arrow-left" aria-hidden="true" style={{ marginRight: 8 }} />
-                Choose a different level
-              </button>
+              {revealed && (
+                <>
+                  <button className="expbtn" onClick={() => setShowExp(e => !e)}>
+                    <i className={`ti ${showExp ? 'ti-chevron-down' : 'ti-chevron-right'}`} />
+                    {showExp ? 'Hide explanation' : 'Show explanation'}
+                  </button>
+                  {showExp && (
+                    <div className="exp">
+                      <div className="exp__head"><i className="ti ti-bulb" /><span>Explanation</span></div>
+                      <p className="exp__body">{q.explanation}</p>
+                    </div>
+                  )}
+                  <RippleButton className="btn--lv" onClick={advance}>
+                    {idx + 1 >= qs.length ? 'See results' : 'Next question'} <i className="ti ti-arrow-right" />
+                  </RippleButton>
+                </>
+              )}
             </div>
-          </div>
-        )
-      })()}
+          )
+        })()}
 
-      {/* ───── REVIEW ───── */}
-      {phase === 'review' && answers[revIdx] && (() => {
-        const a  = answers[revIdx]
-        const q  = a.q
-        const ok = a.sel === a.correct
-        return (
-          <div style={{ padding: '20px 0' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-              <button className="ghost" onClick={() => setPhase('results')} style={{ width: 'auto', padding: '7px 14px' }}>
-                <i className="ti ti-arrow-left" aria-hidden="true" style={{ marginRight: 6 }} />Results
-              </button>
-              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)' }}>
-                {revIdx + 1} / {answers.length}
-              </span>
-            </div>
+        {/* ───── RESULTS ───── */}
+        {phase === 'results' && level && (
+          <ResultsScreen
+            level={level} answers={answers} score={score} best={best}
+            onReview={(i) => { setRevIdx(i); setPhase('review') }}
+            onRetry={() => launch(level)} onHome={() => setPhase('home')}
+          />
+        )}
 
-            <div style={{
-              background: 'var(--color-background-primary)', border: '0.5px solid var(--color-border-tertiary)',
-              borderLeft: `3px solid ${ok ? 'var(--color-border-success)' : 'var(--color-border-danger)'}`,
-              borderRadius: 'var(--border-radius-lg)', padding: '18px 18px 18px 16px', marginBottom: 10,
-            }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', background: `var(--${level.cv}-b)`, color: `var(--${level.cv}-c)`, padding: '2px 8px', borderRadius: 4 }}>
-                  {q.topic}
-                </span>
-                <span style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, color: ok ? 'var(--color-text-success)' : 'var(--color-text-danger)' }}>
-                  <i className={`ti ${ok ? 'ti-check' : 'ti-x'}`} aria-hidden="true" style={{ fontSize: 12 }} />
-                  {ok ? 'Correct' : 'Incorrect'}
-                </span>
+        {/* ───── REVIEW ───── */}
+        {phase === 'review' && answers[revIdx] && (() => {
+          const a = answers[revIdx], q = a.q, ok = a.sel === a.correct
+          return (
+            <div className="screen" style={lvVars(level)}>
+              <div className="rev__nav">
+                <RippleButton className="btn--ghost" style={{ width: 'auto', padding: '9px 16px' }} onClick={() => setPhase('results')}>
+                  <i className="ti ti-arrow-left" /> Results
+                </RippleButton>
+                <span className="rev__count">{revIdx + 1} / {answers.length}</span>
               </div>
-              <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, color: 'var(--color-text-primary)' }}>{q.question}</p>
-            </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-              {q.options.map((opt, i) => {
-                const isCorrect  = i === q.correct
-                const isUserPick = i === a.sel
-                const isWrong    = isUserPick && !isCorrect
-                let bg = 'var(--color-background-secondary)', bd = 'var(--color-border-tertiary)', co = 'var(--color-text-tertiary)'
-                if (isCorrect) { bg = 'var(--color-background-success)'; bd = 'var(--color-border-success)'; co = 'var(--color-text-success)' }
-                if (isWrong)   { bg = 'var(--color-background-danger)';  bd = 'var(--color-border-danger)';  co = 'var(--color-text-danger)' }
-                return (
-                  <div key={i} style={{
-                    display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 14px',
-                    borderRadius: 'var(--border-radius-md)', background: bg, border: `0.5px solid ${bd}`,
-                    color: co, fontSize: 13, lineHeight: 1.5,
-                    opacity: (!isCorrect && !isUserPick) ? 0.45 : 1,
-                  }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, flexShrink: 0, marginTop: 1 }}>
-                      {String.fromCharCode(65 + i)}
-                    </span>
-                    <span style={{ flex: 1 }}>{opt.replace(/^[A-D]\.\s*/i, '')}</span>
-                    {isCorrect  && <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', flexShrink: 0, marginTop: 2 }}>CORRECT</span>}
-                    {isWrong    && <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', flexShrink: 0, marginTop: 2 }}>YOUR ANSWER</span>}
-                  </div>
-                )
-              })}
-            </div>
-
-            <div style={{
-              background: 'var(--color-background-info)', border: '0.5px solid var(--color-border-info)',
-              borderRadius: 'var(--border-radius-md)', padding: '14px 16px', marginBottom: 16,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                <i className="ti ti-bulb" aria-hidden="true" style={{ fontSize: 14, color: 'var(--color-text-info)' }} />
-                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-info)' }}>Explanation</span>
+              <div className="qcard" style={{ borderLeftColor: ok ? 'var(--ok-line)' : 'var(--no-line)' }}>
+                <div className="qcard__tags">
+                  <span className="tag">{q.topic}</span>
+                  <span className="tag--type" style={{ color: ok ? 'var(--ok)' : 'var(--no)', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <i className={`ti ${ok ? 'ti-check' : 'ti-x'}`} style={{ fontSize: 12 }} />{ok ? 'Correct' : 'Incorrect'}
+                  </span>
+                </div>
+                <p className="qcard__text">{q.question}</p>
               </div>
-              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.75, color: 'var(--color-text-primary)' }}>{q.explanation}</p>
-            </div>
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="ghost" onClick={() => setRevIdx(p => Math.max(0, p - 1))} disabled={revIdx === 0} style={{ flex: 1 }}>
-                <i className="ti ti-arrow-left" aria-hidden="true" style={{ marginRight: 6 }} />Prev
-              </button>
-              <button onClick={() => setRevIdx(p => Math.min(answers.length - 1, p + 1))} disabled={revIdx === answers.length - 1}
-                style={{
-                  flex: 1, padding: '10px 0', background: `var(--${level.cv}-b)`,
-                  border: `0.5px solid var(--${level.cv}-c)`, borderRadius: 'var(--border-radius-md)',
-                  fontSize: 13, fontWeight: 500, color: `var(--${level.cv}-c)`,
-                  cursor: revIdx === answers.length - 1 ? 'default' : 'pointer',
-                  opacity: revIdx === answers.length - 1 ? 0.4 : 1,
-                  fontFamily: 'var(--font-sans)',
-                }}>
-                Next <i className="ti ti-arrow-right" aria-hidden="true" style={{ marginLeft: 6 }} />
-              </button>
+              <div className="opts">
+                {q.options.map((opt, i) => {
+                  const isC = i === q.correct, isU = i === a.sel, isW = isU && !isC
+                  const cls = isC ? 'rev__opt c' : isW ? 'rev__opt w' : 'rev__opt x'
+                  return (
+                    <div key={i} className={cls}>
+                      <span className="rev__optkey">{String.fromCharCode(65 + i)}</span>
+                      <span style={{ flex: 1 }}>{opt.replace(/^[A-D]\.\s*/i, '')}</span>
+                      {isC && <span className="rev__badge">CORRECT</span>}
+                      {isW && <span className="rev__badge">YOUR PICK</span>}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="exp">
+                <div className="exp__head"><i className="ti ti-bulb" /><span>Explanation</span></div>
+                <p className="exp__body">{q.explanation}</p>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <RippleButton className="btn--ghost" style={{ flex: 1 }} disabled={revIdx === 0} onClick={() => setRevIdx(p => Math.max(0, p - 1))}>
+                  <i className="ti ti-arrow-left" /> Prev
+                </RippleButton>
+                <RippleButton className="btn--lv" style={{ flex: 1 }} disabled={revIdx === answers.length - 1} onClick={() => setRevIdx(p => Math.min(answers.length - 1, p + 1))}>
+                  Next <i className="ti ti-arrow-right" />
+                </RippleButton>
+              </div>
             </div>
-          </div>
-        )
-      })()}
+          )
+        })()}
+
+        {/* FOOTER */}
+        <footer className="footer">
+          <p className="footer__made">
+            Made with <span className="footer__heart"><i className="ti ti-heart" /></span> by
+            <span className="footer__name">Pranav</span>
+          </p>
+          <p className="footer__meta">© {year} · Built on Salesforce knowledge · Powered by AI</p>
+        </footer>
+      </div>
+    </>
+  )
+}
+
+/* ───────────── RESULTS (separate so hooks run cleanly) ───────────── */
+function ResultsScreen({ level, answers, score, best, onReview, onRetry, onHome }) {
+  const reduced = usePrefersReducedMotion()
+  const total = answers.length
+  const pct = total > 0 ? Math.round((score / total) * 100) : 0
+  const display = useCountUp(score, 1000)
+
+  const msg = pct >= 90 ? 'Outstanding!' : pct >= 70 ? 'Solid work' : pct >= 50 ? 'Keep going' : 'More practice needed'
+  const sub = pct >= 90 ? 'You nailed it. Ready to try a harder level?'
+            : pct >= 70 ? 'Good foundation. Review the ones you missed.'
+            : pct >= 50 ? "You're getting there. Study the explanations."
+            : 'Review all the explanations and run it again.'
+
+  const R = 76, C = 2 * Math.PI * R
+  const offset = C - (pct / 100) * C
+
+  return (
+    <div className="screen" style={lvVars(level)}>
+      <Confetti fire={pct >= 70} />
+      <div className="res">
+        <div className="res__ring">
+          <svg viewBox="0 0 168 168">
+            <circle cx="84" cy="84" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="9" />
+            <circle
+              cx="84" cy="84" r={R} fill="none" stroke="var(--lvc)" strokeWidth="9" strokeLinecap="round"
+              strokeDasharray={C} strokeDashoffset={offset}
+              style={{ transition: reduced ? 'none' : 'stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)', filter: 'drop-shadow(0 0 8px var(--lvg))' }}
+            />
+          </svg>
+          <div className="res__num">{display}<span>/{total}</span></div>
+        </div>
+        <div className="res__msg">{msg}</div>
+        <p className="res__sub">{sub}</p>
+        {best[level.id] !== undefined && (
+          <span className="res__best">best: {best[level.id]}/10 · {level.label}</span>
+        )}
+      </div>
+
+      <div className="breakdown">
+        <p className="breakdown__label">Tap a question to review it</p>
+        <div className="breakdown__grid">
+          {answers.map((a, i) => {
+            const ok = a.sel === a.correct
+            return (
+              <button key={i} className={`qchip ${ok ? 'yes' : 'no'}`} onClick={() => onReview(i)}>{i + 1}</button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="stack">
+        <RippleButton className="btn--ghost" onClick={() => onReview(0)}>
+          <i className="ti ti-eye" /> Review all questions & explanations
+        </RippleButton>
+        <RippleButton className="btn--primary" onClick={onRetry}>
+          <i className="ti ti-refresh" /> New set — {level.label}
+        </RippleButton>
+        <RippleButton className="btn--ghost" onClick={onHome}>
+          <i className="ti ti-arrow-left" /> Choose a different level
+        </RippleButton>
+      </div>
     </div>
   )
 }

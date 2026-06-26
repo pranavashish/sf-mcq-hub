@@ -8,7 +8,7 @@ AI-powered Salesforce scenario-based MCQ practice — 6 career levels, 10 fresh 
 npm install
 
 # Create a .env file
-echo "GROQ_API_KEY=sk-ant-YOUR_KEY_HERE" > .env
+echo "ANTHROPIC_API_KEY=sk-ant-YOUR_KEY_HERE" > .env
 
 # Run dev server (Vercel CLI needed for /api functions locally)
 npm install -g vercel
@@ -24,13 +24,13 @@ See the step-by-step guide in the repo or follow:
 
 1. Push this folder to a GitHub repo
 2. Go to vercel.com → New Project → import the repo
-3. Add `GROQ_API_KEY` in Environment Variables
+3. Add `ANTHROPIC_API_KEY` in Environment Variables
 4. Click Deploy
 
 ## Stack
 
 - Vite + React 18
 - Vercel serverless function (`/api/chat.js`) as API proxy
-- For question generation
+- Anthropic claude-sonnet-4-6 for question generation
 - Tabler Icons (CDN)
 - Zero external UI libraries
