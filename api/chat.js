@@ -18,16 +18,16 @@ export default async function handler(req, res) {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'openai/gpt-oss-120b',       
-        max_tokens: 8000,                     
+        model: 'openai/gpt-oss-120b',
+        reasoning_effort: 'low',          // ← KEY FIX: stops the huge reasoning dump
+        max_completion_tokens: 6000,      // ← cap the answer size
         temperature: 0.8,
-        response_format: { type: 'json_object' }, 
+        response_format: { type: 'json_object' },
         messages: req.body.messages,
       }),
     })
 
     const data = await upstream.json()
-
 
     if (!upstream.ok || data.error) {
       res.status(upstream.status || 500).json({
