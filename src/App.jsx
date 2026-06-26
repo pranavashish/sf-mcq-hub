@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
-import { CloudLogo, CloudMarkMini } from './SalesforceLogo'
+import { CloudLogo } from './SalesforceLogo'
 import {
-  AuroraBackground, TiltCard, RippleButton, Confetti,
+  AuroraBackground, StatusBar, TiltCard, RippleButton, Confetti,
   useCountUp, usePrefersReducedMotion,
 } from './ui'
 
@@ -174,14 +174,8 @@ export default function App() {
       <div className="app-shell">
         <h2 className="sr-only">Salesforce MCQ Practice Hub — scenario-based questions across six career levels</h2>
 
-        {/* NAV */}
-        <nav className="nav">
-          <div className="nav__brand">
-            <CloudMarkMini size={26} />
-            <span className="nav__name">SF MCQ Hub</span>
-          </div>
-          <span className="nav__pill"><i className="ti ti-sparkles" /><span>Free · AI-powered</span></span>
-        </nav>
+        {/* TOP STATUS BAR — clock · brand · weather · theme */}
+        <StatusBar />
 
         {/* ───── HOME ───── */}
         {phase === 'home' && (
@@ -191,8 +185,8 @@ export default function App() {
               <p className="hero__eyebrow">Salesforce Career Ladder</p>
               <h1 className="hero__title">Master the Cloud</h1>
               <p className="hero__sub">
-                Ten AI-generated, scenario-based MCQs every session. Rare gotchas, production edge cases,
-                and detailed explanations — tuned to your experience level.
+                Ten fresh, scenario-based MCQs every session — rare gotchas, real production edge cases,
+                and a full explanation for every answer, tuned to your experience level.
               </p>
               <div className="hero__stats">
                 <span className="hero__chip"><i className="ti ti-stack-2" />6 levels</span>
@@ -372,10 +366,10 @@ export default function App() {
         {/* FOOTER */}
         <footer className="footer">
           <p className="footer__made">
-            Made with <span className="footer__heart"><i className="ti ti-heart" /></span> by
+            Crafted with <span className="footer__heart"><i className="ti ti-heart" /></span> by
             <span className="footer__name">Pranav</span>
           </p>
-          <p className="footer__meta">© {year} · Built on Salesforce knowledge · Powered by AI</p>
+          <p className="footer__meta">© {year} · SF MCQ Hub · Salesforce scenario practice</p>
         </footer>
       </div>
     </>
