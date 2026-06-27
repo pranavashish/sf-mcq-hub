@@ -1,24 +1,23 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<!doctype html>
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#04132e" />
-    <title>SF MCQ Hub — Salesforce scenario practice</title>
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"
-    />
+    <meta name="theme-color" content="#FDF1E6" />
+    <meta name="description" content="SF MCQ Hub — master Salesforce one real-world scenario at a time. Fresh exam-grade questions, six career levels, gamified practice." />
+    <title>SF MCQ Hub — Salesforce Scenario Practice</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.1.0/dist/tabler-icons.min.css" />
     <script>
       (function () {
         try {
           var t = localStorage.getItem('sfq_theme');
           if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           document.documentElement.setAttribute('data-theme', t);
-        } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'dark');
-        }
+          document.querySelector('meta[name=theme-color]').setAttribute('content', t === 'dark' ? '#17110C' : '#FDF1E6');
+        } catch (e) {}
       })();
     </script>
   </head>
