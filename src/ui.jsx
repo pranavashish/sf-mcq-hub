@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { motion, useMotionValue, useSpring } from 'framer-motion'
 import { CloudMarkMini } from './SalesforceLogo'
+import { useSound } from './sound'
 
 /* ─────────── HOOKS ─────────── */
 
@@ -13,7 +15,7 @@ export function usePrefersReducedMotion() {
   return reduced
 }
 
-function useFinePointer() {
+export function useFinePointer() {
   const [fine, setFine] = useState(true)
   useEffect(() => {
     const mq = window.matchMedia('(hover: hover) and (pointer: fine)')
@@ -23,7 +25,7 @@ function useFinePointer() {
   return fine
 }
 
-export function useCountUp(target, duration = 900) {
+export function useCountUp(target, duration = 1000) {
   const reduced = usePrefersReducedMotion()
   const [val, setVal] = useState(0)
   const raf = useRef(0)
@@ -32,8 +34,7 @@ export function useCountUp(target, duration = 900) {
     const start = performance.now()
     const tick = (now) => {
       const t = Math.min(1, (now - start) / duration)
-      const eased = 1 - Math.pow(1 - t, 3)
-      setVal(Math.round(target * eased))
+      setVal(Math.round(target * (1 - Math.pow(1 - t, 3))))
       if (t < 1) raf.current = requestAnimationFrame(tick)
     }
     raf.current = requestAnimationFrame(tick)
@@ -111,89 +112,59 @@ export function useWeather() {
   return w
 }
 
-/* ─────────── STATUS BAR ─────────── */
+/* ─────────── MAGNETIC BUTTON (spring pull toward cursor + ripple) ─────────── */
 
-function pad(n) { return String(n).padStart(2, '0') }
-
-export function StatusBar() {
-  const now = useClock()
-  const w = useWeather()
-  const { theme, toggle } = useTheme()
-  const date = now.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
-  const wm = w.loading || w.error ? null : WMO(w.code, w.isDay)
-
-  return (
-    <div className="topbar">
-      <div className="topbar__clock">
-        <i className="ti ti-clock-hour-4" aria-hidden="true" />
-        <span className="topbar__time">{pad(now.getHours())}:{pad(now.getMinutes())}:<span className="sec">{pad(now.getSeconds())}</span></span>
-        <span className="topbar__date">{date}</span>
-      </div>
-
-      <div className="topbar__brand"><CloudMarkMini size={22} /><span>SF MCQ Hub</span></div>
-
-      <div className="topbar__right">
-        {w.loading ? (
-          <span className="weatherpill skel" aria-hidden="true" />
-        ) : w.error ? null : (
-          <span className="weatherpill" title={wm.label}>
-            <i className={`ti ${wm.icon}`} aria-hidden="true" />
-            <span className="temp">{w.temp}°</span>
-            {w.city && <span className="city">{w.city}</span>}
-          </span>
-        )}
-        <button className="iconbtn" onClick={toggle} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-          <i className={`ti ${theme === 'dark' ? 'ti-sun' : 'ti-moon'}`} aria-hidden="true" />
-        </button>
-      </div>
-    </div>
-  )
-}
-
-/* ─────────── MESH PARALLAX BACKGROUND ─────────── */
-
-export function AuroraBackground() {
-  const reduced = usePrefersReducedMotion()
+export function MagneticButton({ children, className = '', style = {}, onClick, disabled, strength = 0.4 }) {
+  const ref = useRef(null)
   const fine = useFinePointer()
-  useEffect(() => {
-    const root = document.documentElement
-    if (reduced || !fine) { root.style.setProperty('--px', '0'); root.style.setProperty('--py', '0') }
-    let f = 0
-    const onMove = (e) => {
-      if (reduced || !fine) return
-      cancelAnimationFrame(f)
-      f = requestAnimationFrame(() => {
-        root.style.setProperty('--px', (((e.clientX / window.innerWidth) * 2 - 1)).toFixed(3))
-        root.style.setProperty('--py', (((e.clientY / window.innerHeight) * 2 - 1)).toFixed(3))
-      })
+  const x = useMotionValue(0)
+  const y = useMotionValue(0)
+  const sx = useSpring(x, { stiffness: 250, damping: 18 })
+  const sy = useSpring(y, { stiffness: 250, damping: 18 })
+
+  const onMove = (e) => {
+    if (!fine || disabled || !ref.current) return
+    const r = ref.current.getBoundingClientRect()
+    x.set((e.clientX - (r.left + r.width / 2)) * strength)
+    y.set((e.clientY - (r.top + r.height / 2)) * strength)
+  }
+  const reset = () => { x.set(0); y.set(0) }
+
+  const handle = (e) => {
+    if (disabled) return
+    const el = ref.current
+    if (el) {
+      const r = el.getBoundingClientRect()
+      const span = document.createElement('span')
+      span.className = 'ripple'
+      const size = Math.max(r.width, r.height)
+      span.style.width = span.style.height = `${size}px`
+      span.style.left = `${e.clientX - r.left - size / 2}px`
+      span.style.top = `${e.clientY - r.top - size / 2}px`
+      el.appendChild(span); setTimeout(() => span.remove(), 650)
     }
-    let s = 0
-    const onScroll = () => { cancelAnimationFrame(s); s = requestAnimationFrame(() => root.style.setProperty('--sy', String(window.scrollY))) }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('scroll', onScroll); cancelAnimationFrame(f); cancelAnimationFrame(s) }
-  }, [reduced, fine])
+    onClick && onClick(e)
+  }
 
   return (
-    <div className="aurora" aria-hidden="true">
-      <div className="aurora__sky" />
-      <div className="aurora__orb aurora__orb--1" />
-      <div className="aurora__orb aurora__orb--2" />
-      <div className="aurora__orb aurora__orb--3" />
-      <div className="aurora__orb aurora__orb--4" />
-      <div className="shape shape--1" />
-      <div className="shape shape--2" />
-      <div className="shape shape--3" />
-      <div className="aurora__grid" />
-      <div className="aurora__noise" />
-      <div className="aurora__vignette" />
-    </div>
+    <motion.button
+      ref={ref}
+      className={`btn ${className}`}
+      style={{ ...style, x: sx, y: sy }}
+      onMouseMove={onMove}
+      onMouseLeave={reset}
+      onClick={handle}
+      disabled={disabled}
+      whileTap={{ scale: 0.96 }}
+    >
+      <span className="btn__label">{children}</span>
+    </motion.button>
   )
 }
 
-/* ─────────── TILT CARD ─────────── */
+/* ─────────── 3D TILT CARD ─────────── */
 
-export function TiltCard({ children, className = '', style = {}, max = 9, onClick }) {
+export function TiltCard({ children, className = '', style = {}, max = 10, onClick }) {
   const reduced = usePrefersReducedMotion()
   const fine = useFinePointer()
   const ref = useRef(null)
@@ -224,36 +195,53 @@ export function TiltCard({ children, className = '', style = {}, max = 9, onClic
   )
 }
 
-/* ─────────── RIPPLE BUTTON ─────────── */
+/* ─────────── STATUS BAR ─────────── */
 
-export function RippleButton({ children, className = '', style = {}, onClick, disabled, type = 'button' }) {
-  const ref = useRef(null)
-  const handle = (e) => {
-    const el = ref.current
-    if (el) {
-      const r = el.getBoundingClientRect()
-      const span = document.createElement('span')
-      span.className = 'ripple'
-      const size = Math.max(r.width, r.height)
-      span.style.width = span.style.height = `${size}px`
-      span.style.left = `${e.clientX - r.left - size / 2}px`
-      span.style.top = `${e.clientY - r.top - size / 2}px`
-      el.appendChild(span); setTimeout(() => span.remove(), 650)
-    }
-    onClick && onClick(e)
-  }
+const pad = (n) => String(n).padStart(2, '0')
+
+export function StatusBar() {
+  const now = useClock()
+  const w = useWeather()
+  const { theme, toggle } = useTheme()
+  const { muted, toggle: toggleMute } = useSound()
+  const date = now.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+  const wm = w.loading || w.error ? null : WMO(w.code, w.isDay)
+
   return (
-    <button ref={ref} type={type} className={`btn ${className}`} style={style} onClick={handle} disabled={disabled}>
-      <span className="btn__label">{children}</span>
-    </button>
+    <div className="topbar">
+      <div className="topbar__clock">
+        <i className="ti ti-clock-hour-4" aria-hidden="true" />
+        <span className="topbar__time">{pad(now.getHours())}:{pad(now.getMinutes())}:<span className="sec">{pad(now.getSeconds())}</span></span>
+        <span className="topbar__date">{date}</span>
+      </div>
+
+      <div className="topbar__brand"><CloudMarkMini size={22} /><span>SF MCQ Hub</span></div>
+
+      <div className="topbar__right">
+        {w.loading ? (
+          <span className="weatherpill skel" aria-hidden="true" />
+        ) : w.error ? null : (
+          <span className="weatherpill" title={wm.label}>
+            <i className={`ti ${wm.icon}`} aria-hidden="true" />
+            <span className="temp">{w.temp}°</span>
+            {w.city && <span className="city">{w.city}</span>}
+          </span>
+        )}
+        <button className="iconbtn" onClick={toggleMute} aria-label={muted ? 'Unmute sound' : 'Mute sound'}>
+          <i className={`ti ${muted ? 'ti-volume-off' : 'ti-volume'}`} aria-hidden="true" />
+        </button>
+        <button className="iconbtn" onClick={toggle} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+          <i className={`ti ${theme === 'dark' ? 'ti-sun' : 'ti-moon'}`} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
   )
 }
 
 /* ─────────── CONFETTI ─────────── */
 
 const CC = ['#1A9FFF', '#0B5CFF', '#7CD4FF', '#FBBF24', '#2DD4BF', '#A78BFA', '#FB7185']
-
-export function Confetti({ fire, count = 44 }) {
+export function Confetti({ fire, count = 48 }) {
   const reduced = usePrefersReducedMotion()
   if (!fire || reduced) return null
   const pieces = Array.from({ length: count }, (_, i) => (
@@ -265,7 +253,7 @@ export function Confetti({ fire, count = 44 }) {
       animationDelay: `${Math.random() * 0.3}s`,
       animationDuration: `${1.6 + Math.random() * 1.4}s`,
       '--rot': `${Math.random() * 360}deg`,
-      '--drift': `${(Math.random() - 0.5) * 200}px`,
+      '--drift': `${(Math.random() - 0.5) * 220}px`,
     }} />
   ))
   return <div className="confetti" aria-hidden="true">{pieces}</div>

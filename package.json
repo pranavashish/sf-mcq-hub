@@ -1,6 +1,6 @@
 {
   "name": "sf-mcq-hub",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,12 @@
   },
   "dependencies": {
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0",
+    "@react-three/fiber": "^8.17.10",
+    "@react-three/drei": "^9.114.0",
+    "@react-three/postprocessing": "^2.16.3",
+    "framer-motion": "^11.11.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
